@@ -1,0 +1,7 @@
+# Type declarations Claude Code generates when it loads a mod
+.claude-plugin/types/
+plugins/*/.claude-plugin/types/
+
+node_modules/
+.DS_Store
+*.log

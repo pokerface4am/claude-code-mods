@@ -1,0 +1,19 @@
+{
+  "name": "claude-code-mods",
+  "description": "Two mods for Claude Code: a per-session usage cap (/budget) and a prompt-cache keep-alive (/keepalive)",
+  "owner": {
+    "name": "PokerFace4am"
+  },
+  "plugins": [
+    {
+      "name": "session-budget",
+      "source": "./plugins/session-budget",
+      "description": "Cap how much of the account's 5h / weekly usage one session may use; soft-stops the session at the cap"
+    },
+    {
+      "name": "cache-keepalive",
+      "source": "./plugins/cache-keepalive",
+      "description": "Keep the prompt cache warm while away: /keepalive N pings every ~50 min, at most N times"
+    }
+  ]
+}

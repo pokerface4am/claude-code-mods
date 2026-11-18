@@ -1,0 +1,43 @@
+{
+  "name": "cache-keepalive",
+  "version": "0.3.0",
+  "description": "Keep the session's prompt cache warm while you are away: /keepalive N forks a tiny request every ~50 min, at most N times per idle stretch",
+  "author": { "name": "PokerFace4am", "url": "https://x.com/4amPokerFace" },
+  "homepage": "https://github.com/pokerface4am/claude-code-mods",
+  "repository": "https://github.com/pokerface4am/claude-code-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "title": "Language",
+      "type": "string",
+      "options": ["auto", "en", "zh"],
+      "default": "auto",
+      "description": "Language of the mod's messages. auto follows LC_ALL / LC_MESSAGES / LANG and falls back to English (the usual result on Windows)"
+    },
+    "intervalMinutes": {
+      "title": "Ping interval (minutes)",
+      "type": "number",
+      "description": "Minutes after the last request before each keep-alive ping; keep it under the cache TTL",
+      "default": 50
+    },
+    "cacheTtlMinutes": {
+      "title": "Cache TTL (minutes)",
+      "type": "number",
+      "description": "The prompt cache TTL; once the last request is older than this, pinging is pointless and the mod stops",
+      "default": 60
+    },
+    "defaultMax": {
+      "title": "Default max pings",
+      "type": "number",
+      "description": "Max pings per idle stretch when /keepalive is run as `on`",
+      "default": 3
+    },
+    "retryMinutes": {
+      "title": "Retry wait (minutes)",
+      "type": "number",
+      "description": "Minutes to wait before retrying a ping that failed with an API error; each retry counts as an attempt",
+      "default": 5
+    }
+  }
+}
