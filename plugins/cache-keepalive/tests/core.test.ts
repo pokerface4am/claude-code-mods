@@ -10,6 +10,8 @@ import {
   parseArgs,
   pingReport,
   readOptions,
+  isIdleCompactionOn,
+  shouldTurnIdleCompactionOff,
   shortText,
   statusText,
 } from '../hooks/core'
@@ -61,6 +63,37 @@ describe('readOptions', () => {
     expect(readOptions(undefined)).toEqual(DEFAULTS)
     expect(readOptions({ intervalMinutes: -5, cacheTtlMinutes: 'x', defaultMax: 0 })).toEqual(DEFAULTS)
     expect(readOptions({ intervalMinutes: 20, defaultMax: 2.4 })).toEqual({ ...DEFAULTS, intervalMinutes: 20, defaultMax: 2 })
+  })
+
+  test('disableIdleCompaction is on unless it is set to false', () => {
+    expect(DEFAULTS.disableIdleCompaction).toBe(true)
+    expect(readOptions({}).disableIdleCompaction).toBe(true)
+    expect(readOptions({ disableIdleCompaction: 'nonsense' }).disableIdleCompaction).toBe(true)
+    expect(readOptions({ disableIdleCompaction: false }).disableIdleCompaction).toBe(false)
+    expect(readOptions({ disableIdleCompaction: 'false' }).disableIdleCompaction).toBe(false)
+  })
+})
+
+describe('idle compaction', () => {
+  const layer = (source: string, settings: Record<string, unknown>) => ({ source, settings })
+
+  test('reads as off when the option is on and nothing mentions it', () => {
+    expect(shouldTurnIdleCompactionOff(true, {}, [])).toBe(true)
+    expect(shouldTurnIdleCompactionOff(true, { model: 'opus' }, [layer('user', { model: 'opus' }), layer('project', {})])).toBe(true)
+  })
+
+  test('a value written in any settings source stands, on or off', () => {
+    expect(shouldTurnIdleCompactionOff(true, { idleCompaction: true }, [layer('user', { idleCompaction: true })])).toBe(false)
+    expect(shouldTurnIdleCompactionOff(true, { idleCompaction: false }, [layer('user', {}), layer('policy', { idleCompaction: false })])).toBe(false)
+  })
+
+  test('the merged settings alone are enough to see a written value, and so is one layer alone', () => {
+    expect(shouldTurnIdleCompactionOff(true, { idleCompaction: true }, [])).toBe(false)
+    expect(shouldTurnIdleCompactionOff(true, {}, [layer('user', { idleCompaction: true })])).toBe(false)
+  })
+
+  test('with the option off the settings are never touched', () => {
+    expect(shouldTurnIdleCompactionOff(false, {}, [])).toBe(false)
   })
 })
 
@@ -119,13 +152,24 @@ describe('messages in English', () => {
   })
 
   test('the full state of a bare /keepalive', () => {
-    expect(describeState(E, null, { kind: 'off' }, DEFAULTS)).toBe('keepalive is off. Arm it with /keepalive N (default N=3). Interval 50 min, changed in /config.')
-    expect(describeState(E, plan, { kind: 'fire', delayMs: 42 * M }, DEFAULTS)).toBe(
-      'keepalive is on: 1/3 pings used during this absence.\nNext ping in 42m.\nInterval 50 min, TTL taken as 60 min.',
+    expect(describeState(E, null, { kind: 'off' }, DEFAULTS, false)).toBe(
+      'keepalive is off. Arm it with /keepalive N (default N=3). Interval 50 min, changed in /config.\nIdle compaction is off: an idle conversation is not replaced by a summary.',
     )
-    expect(describeState(E, plan, { kind: 'expired', elapsedMs: 65 * M }, DEFAULTS)).toContain('The last request was 1h05 ago and the cache has expired')
-    expect(describeState(T, plan, { kind: 'fire', delayMs: 42 * M }, DEFAULTS)).toBe(
-      'keepalive 开启：本次离开期间已续 1/3 次。\n下一次续命在 42m 后。\n间隔 50 分钟，TTL 按 60 分钟算。',
+    expect(describeState(E, plan, { kind: 'fire', delayMs: 42 * M }, DEFAULTS, false)).toBe(
+      'keepalive is on: 1/3 pings used during this absence.\nNext ping in 42m.\nInterval 50 min, TTL taken as 60 min.\nIdle compaction is off: an idle conversation is not replaced by a summary.',
+    )
+    expect(describeState(E, plan, { kind: 'expired', elapsedMs: 65 * M }, DEFAULTS, false)).toContain('The last request was 1h05 ago and the cache has expired')
+    expect(describeState(T, plan, { kind: 'fire', delayMs: 42 * M }, DEFAULTS, false)).toBe(
+      'keepalive 开启：本次离开期间已续 1/3 次。\n下一次续命在 42m 后。\n间隔 50 分钟，TTL 按 60 分钟算。\nidle compaction 已关闭：对话闲置时不会被压成摘要。',
+    )
+  })
+
+  test('the last line of the full state warns when idle compaction is on', () => {
+    expect(describeState(E, plan, { kind: 'fire', delayMs: 42 * M }, DEFAULTS, true).split('\n').at(-1)).toBe(
+      'Idle compaction is on: a long conversation left idle for about an hour is replaced by a summary. To keep the full conversation, turn it off in /config.',
+    )
+    expect(describeState(T, null, { kind: 'off' }, DEFAULTS, true).split('\n').at(-1)).toBe(
+      'idle compaction 开着：长对话闲置约一小时会被压成摘要。要保留完整对话，在 /config 里把它关掉。',
     )
   })
 
@@ -151,5 +195,18 @@ describe('messages in English', () => {
     expect(langOfLocale([undefined, undefined, 'zh_CN.UTF-8'])).toBe('zh')
     expect(langOfLocale(['en_US.UTF-8', undefined, 'zh_CN.UTF-8'])).toBe('en')
     expect(langOfLocale([undefined, undefined, undefined])).toBe('en')
+  })
+})
+
+describe('how idle compaction reads with the mod loaded', () => {
+  test('nothing written: the option decides', () => {
+    expect(isIdleCompactionOn(true, undefined)).toBe(false)
+    expect(isIdleCompactionOn(false, undefined)).toBe(true)
+  })
+
+  test('a written value decides, whatever the option', () => {
+    expect(isIdleCompactionOn(true, true)).toBe(true)
+    expect(isIdleCompactionOn(true, false)).toBe(false)
+    expect(isIdleCompactionOn(false, false)).toBe(false)
   })
 })

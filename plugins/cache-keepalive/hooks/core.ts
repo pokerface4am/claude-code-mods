@@ -20,6 +20,8 @@ export type Options = {
   cacheTtlMinutes: number
   defaultMax: number
   retryMinutes: number
+  /** Read Claude Code's idle compaction as off while this mod is loaded. */
+  disableIdleCompaction: boolean
 }
 
 export const DEFAULTS: Options = {
@@ -27,6 +29,7 @@ export const DEFAULTS: Options = {
   cacheTtlMinutes: 60,
   defaultMax: 3,
   retryMinutes: 5,
+  disableIdleCompaction: true,
 }
 
 function positive(raw: unknown, fallback: number): number {
@@ -34,7 +37,13 @@ function positive(raw: unknown, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** The manifest's options, each a positive number, defaults filled in for anything else. */
+function flag(raw: unknown, fallback: boolean): boolean {
+  if (raw === true || raw === 'true') return true
+  if (raw === false || raw === 'false') return false
+  return fallback
+}
+
+/** The manifest's options: positive numbers and a flag, defaults filled in for anything else. */
 export function readOptions(raw: PluginOptions | undefined): Options {
   const r = raw ?? {}
   return {
@@ -42,7 +51,34 @@ export function readOptions(raw: PluginOptions | undefined): Options {
     cacheTtlMinutes: positive(r.cacheTtlMinutes, DEFAULTS.cacheTtlMinutes),
     defaultMax: Math.max(1, Math.round(positive(r.defaultMax, DEFAULTS.defaultMax))),
     retryMinutes: positive(r.retryMinutes, DEFAULTS.retryMinutes),
+    disableIdleCompaction: flag(r.disableIdleCompaction, DEFAULTS.disableIdleCompaction),
   }
+}
+
+/** The settings.json key that switches Claude Code's idle compaction. */
+export const IDLE_COMPACTION_KEY = 'idleCompaction'
+
+/**
+ * Whether the merged settings should read idle compaction as off: the option is on and nothing
+ * says anything about it, neither the settings as merged nor any one source. A value a person
+ * or an administrator wrote in a settings file, on or off, stands.
+ * Idle compaction and keep-alive answer the same problem in opposite ways (summarize the
+ * conversation, or keep it as it is), so with this mod loaded the default flips to keeping it.
+ */
+export function shouldTurnIdleCompactionOff(isEnabled: boolean, merged: object, layers: readonly { settings: object }[]): boolean {
+  if (!isEnabled) return false
+  const mentions = (settings: object) => (settings as Record<string, unknown>)[IDLE_COMPACTION_KEY] !== undefined
+  return !mentions(merged) && !layers.some(l => mentions(l.settings))
+}
+
+/**
+ * Whether idle compaction is on with this mod loaded, from `written`: the key's value as a
+ * settings read gives it, undefined when nothing sets it. It holds whether or not the read
+ * already went through this mod's own hook: false stays off, a written true stays on, and
+ * nothing written falls to the option.
+ */
+export function isIdleCompactionOn(isEnabled: boolean, written: unknown): boolean {
+  return written === undefined ? !isEnabled : written !== false
 }
 
 export type Command =
@@ -150,9 +186,13 @@ export function shortText(t: Messages, plan: KeepalivePlan | null, d: Decision):
   return line === undefined ? t.shortOff : t.shortOn(line.slice(STATUS_HEAD.length))
 }
 
-/** The full answer of `/keepalive` with no arguments. */
-export function describe(t: Messages, plan: KeepalivePlan | null, d: Decision, o: Options): string {
-  if (plan === null) return t.describeOff(o.defaultMax, o.intervalMinutes)
+/**
+ * The full answer of `/keepalive` with no arguments. Its last line says whether idle compaction
+ * is on, as the settings read now: the other thing that can happen to an idle conversation.
+ */
+export function describe(t: Messages, plan: KeepalivePlan | null, d: Decision, o: Options, isIdleCompactionOn: boolean): string {
+  const idle = isIdleCompactionOn ? t.idleOn : t.idleOff
+  if (plan === null) return [t.describeOff(o.defaultMax, o.intervalMinutes), idle].join('\n')
   const lines = [t.describeOn(plan.used, plan.max)]
   switch (d.kind) {
     case 'running':
@@ -172,6 +212,7 @@ export function describe(t: Messages, plan: KeepalivePlan | null, d: Decision, o
       break
   }
   lines.push(t.describeTiming(o.intervalMinutes, o.cacheTtlMinutes))
+  lines.push(idle)
   return lines.join('\n')
 }
 

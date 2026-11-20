@@ -1,6 +1,6 @@
 {
   "name": "cache-keepalive",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Keep the session's prompt cache warm while you are away: /keepalive N forks a tiny request every ~50 min, at most N times per idle stretch",
   "author": { "name": "PokerFace4am", "url": "https://x.com/4amPokerFace" },
   "homepage": "https://github.com/pokerface4am/claude-code-mods",
@@ -14,6 +14,12 @@
       "options": ["auto", "en", "zh"],
       "default": "auto",
       "description": "Language of the mod's messages. auto follows LC_ALL / LC_MESSAGES / LANG and falls back to English (the usual result on Windows)"
+    },
+    "disableIdleCompaction": {
+      "title": "Turn idle compaction off",
+      "type": "boolean",
+      "description": "While this mod is installed, Claude Code's idle compaction reads as off, so an idle conversation is kept instead of being replaced by a summary. Nothing is written to your settings files, and a value you wrote there for idleCompaction still wins",
+      "default": true
     },
     "intervalMinutes": {
       "title": "Ping interval (minutes)",

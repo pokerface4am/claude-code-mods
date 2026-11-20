@@ -40,6 +40,8 @@ const zh = {
   describePinging: '正在续命。',
   describeNext: (inTime: string) => `下一次续命在 ${inTime} 后。`,
   describeTiming: (interval: number, ttl: number) => `间隔 ${interval} 分钟，TTL 按 ${ttl} 分钟算。`,
+  idleOff: 'idle compaction 已关闭：对话闲置时不会被压成摘要。',
+  idleOn: 'idle compaction 开着：长对话闲置约一小时会被压成摘要。要保留完整对话，在 /config 里把它关掉。',
 
   // transcript lines; `head` is `keepalive used/max`
   pingWarm: (head: string, cached: string, total: string, percent: number) =>
@@ -87,6 +89,9 @@ const en: Messages = {
   describePinging: 'Pinging now.',
   describeNext: inTime => `Next ping in ${inTime}.`,
   describeTiming: (interval, ttl) => `Interval ${interval} min, TTL taken as ${ttl} min.`,
+  idleOff: 'Idle compaction is off: an idle conversation is not replaced by a summary.',
+  idleOn:
+    'Idle compaction is on: a long conversation left idle for about an hour is replaced by a summary. To keep the full conversation, turn it off in /config.',
 
   pingWarm: (head, cached, total, percent) => `${head}: cache kept warm, ${cached}/${total} tokens read from cache (${percent}%)`,
   pingCold: (head, percent, total) => `${head}: cache miss (${percent}%), ${total} tokens written again`,

@@ -18,6 +18,8 @@ Claude Code 自带一个办法，叫 idle compaction，默认开着：20 万 tok
 
 用 `/keepalive N` 开启之后，mod 会等到距离 session 最后一次请求过去 50 分钟，然后把那次请求原样分叉出一个极小的、不带工具的请求（`$.model.fork`），提示词只有一句「回一个句号」。这个请求读到了 cache，cache 的一小时就重新开始算。每次离开期间最多重复 N 次，所以不可能无限续下去。
 
+装着这个 mod 的时候，它还会把 Claude Code 的 idle compaction 关掉，因为摘要正是它要避免的东西。这是个可以改的默认值，见下面的 [Idle compaction](#idle-compaction) 一节。
+
 ## 安装
 
 在终端 session 的提示符里：
@@ -79,11 +81,31 @@ claude plugin install cache-keepalive --marketplace pokerface4am/claude-code-mod
 
 **它依赖一小时的 cache。** Claude Code 只有在「订阅、且在套餐自带额度内」时才默认申请一小时的 TTL。用 API key 或云厂商，或者超出套餐限额、开始走用量点数之后，主对话的 cache 只有五分钟。这时按 mod 的默认设置，第一次续命就会发现 cache 已经没了，它会告诉你并且自己关掉。用 API key 或云厂商的话，先把 Claude Code 的 `promptCacheTtl` 设置改成 `1h`。
 
-**idle compaction 和这个 mod 是二选一。** idle compaction 默认开着，按文档的说法，它的计时是从 session 最后一次请求算起的；mod 发的请求算不算，文档没写。我自己是把 idle compaction 关掉用的（`/config` 里的 `Idle compaction` 一行，或者 settings.json 里写 `"idleCompaction": false`），两者同时开的情况我没有测过。如果压缩真的发生了，mod 会察觉，不再去续旧的对话，等你的下一轮。想保留完整对话，就把 idle compaction 关掉；能接受摘要的话，大对话用不着这个 mod。
+**它是用来代替 idle compaction 的。** 装上这个 mod，idle compaction 默认就被关掉了，每个 session 都是。怎么做到的、怎么保留它，见 [Idle compaction](#idle-compaction) 一节。能接受摘要的话，大对话用不着这个 mod。
 
 **它管几个小时，不管过夜。** 续一次要把整个上下文读一遍。60 万 token 的对话每次就是读 60 万 token，再便宜也是钱；而且如果你没在最后一次续命后的一小时内回来，前面的就白续了。
 
 **电脑得醒着。** 计时器跑在 Claude Code 的进程里。
+
+## Idle compaction
+
+idle compaction 和这个 mod 对同一个问题给的是相反的答案：一个把闲置的对话换成摘要，一个让对话原样留着。两个一起开没有意义，所以**装上这个 mod，默认就会把 idle compaction 关掉。**
+
+具体是这样的：
+
+- 只要 mod 装着并且启用，Claude Code 读到的 `idleCompaction` 设置就是 `false`。每个 session 都是这样，包括你根本没敲 `/keepalive` 的那些。
+- 不会往你的设置文件里写任何东西。mod 挂的是 `settings.read` 钩子，只在 Claude Code 读设置的时候改写这个值。把 mod 停用或卸载，你自己的设置就回来了。
+- 你自己写的值优先。任何一个设置文件（你的、项目的、组织的）里只要写了 `idleCompaction`，不管是 `true` 还是 `false`，mod 都不动它。
+- `/keepalive` 不带参数时，最后一行会告诉你 idle compaction 现在读出来是开还是关。
+
+代价是：在你没开 `/keepalive` 的 session 里，大对话闲置之后不会再被压成摘要，离开超过一小时回来就是全量重写 cache。不到 20 万 token 的对话本来就是这个待遇。
+
+想保留 idle compaction，下面两种做法任选一种：
+
+- 把 mod 的 `disableIdleCompaction` 选项设成 `false`，在 `/config` 里或安装时的设置界面上改；
+- 在你的 `settings.json` 里写上 `"idleCompaction": true`。
+
+有一件事我没有做：在全新安装的情况下，把一个 20 万 token 的 session 闲置一小时，亲眼确认压缩没有发生。mod 依靠的是 Claude Code 文档里写明的行为，也就是 `settings.read` 钩子的回答就是所有读设置的地方拿到的值，测试里也检查了别的读取方看到的是改写后的值。我自己的机器一直是在设置里直接写着 `"idleCompaction": false` 的。
 
 ## 几道保险
 
@@ -98,6 +120,7 @@ claude plugin install cache-keepalive --marketplace pokerface4am/claude-code-mod
 mod 是以你的权限运行的代码，所以这里把它碰的东西全部列出来。`claude plugin validate` 会从源码里打印出同一份清单。
 
 - **它会在你离开时发模型请求。** 这就是它的全部功能，每一次都消耗你的用量：整个上下文按 cache 读取价，加几个输出 token。你不在那个 session 里开启，它就不发；开了也最多 N 次。
+- **它会改变 Claude Code 一项设置读出来的值。** mod 加载期间，`idleCompaction` 读出来是 `false`，除非某个设置文件里写了它，或者你把 `disableIdleCompaction` 选项关了。这个值只在读取时被改写，不会写进磁盘。mod 也会读这项设置，用来告诉你它的状态。
 - **它自己不发任何网络请求**，不读写文件，不起进程。
 - **环境变量。** 读 `LANG`、`LC_ALL`、`LC_MESSAGES`，用来选语言。不写任何变量。
 - **session 状态。** 三个值：开启情况（上限和已用次数）、cache 上次被读到的时间、上一次 `/keepalive` 输出的文字。
@@ -107,6 +130,7 @@ mod 是以你的权限运行的代码，所以这里把它碰的东西全部列�
 在 `/config` 里，或安装时的设置界面：
 
 - `language`（`auto`）：`auto`、`en` 或 `zh`。`auto` 跟随 `LC_ALL` / `LC_MESSAGES` / `LANG`，识别不出时用英文，Windows 上通常就是这个结果。
+- `disableIdleCompaction`（`true`）：装着 mod 的时候，把 Claude Code 的 idle compaction 读成关闭。见 [Idle compaction](#idle-compaction) 一节。
 - `intervalMinutes`（50）：最后一次请求之后多少分钟续一次。要比 TTL 短。
 - `cacheTtlMinutes`（60）：超过这个时间就不续了。
 - `defaultMax`（3）：`/keepalive on` 用的次数。

@@ -6,6 +6,8 @@ import {
   decide,
   describe,
   hitOf,
+  IDLE_COMPACTION_KEY,
+  isIdleCompactionOn,
   MINUTE_MS,
   minutes,
   parseArgs,
@@ -13,6 +15,7 @@ import {
   PING_PROMPT,
   readOptions,
   shortText,
+  shouldTurnIdleCompactionOff,
   statusText,
 } from './core'
 import type { Decision, Options, Situation } from './core'
@@ -129,7 +132,11 @@ async function runCommand($: EngineInterface, rt: Runtime, args: string): Promis
   }
   const d = await reschedule($, rt)
   const s = await situation($, rt)
-  return cmd.kind === 'status' ? describe(rt.t, s.plan, d, rt.o) : shortText(rt.t, s.plan, d)
+  if (cmd.kind !== 'status') return shortText(rt.t, s.plan, d)
+  // What the key reads as now. This mod's own hook answers this read too, so the value is
+  // already false where the hook turned it off; isIdleCompactionOn gives the same answer either way.
+  const written = await $.settings.read({ key: 'idleCompaction' })
+  return describe(rt.t, s.plan, d, rt.o, isIdleCompactionOn(rt.o.disableIdleCompaction, written))
 }
 
 export const register: Register = (on, rawOptions) => {
@@ -160,6 +167,17 @@ export const register: Register = (on, rawOptions) => {
   on('session.end', async ($, e, next) => {
     stopTimers(rt)
     return next(e)
+  })
+
+  // Idle compaction would replace an idle conversation with a summary, which is the opposite of
+  // keeping it. Unless a settings file says anything about it, the merged settings read it as
+  // off while this mod is loaded. No file is written: disabling or removing the mod gives the
+  // person's own setting back. A read of one source, as loaded, is left alone.
+  on('settings.read', async ($, e, next) => {
+    const answer = await next(e)
+    if (answer.value === undefined || e.source !== undefined) return answer
+    if (!shouldTurnIdleCompactionOff(rt.o.disableIdleCompaction, answer.value, e.layers ?? [])) return answer
+    return { value: { ...answer.value, [IDLE_COMPACTION_KEY]: false } }
   })
 
   on('turn.start', async ($, e, next) => {

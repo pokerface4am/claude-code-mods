@@ -7,13 +7,13 @@
 | Mod | 命令 | 做什么 |
 |---|---|---|
 | [session-budget](plugins/session-budget/README.zh-CN.md) | `/budget` | 给单个 session 设账号 5 小时 / 周用量的上限，触顶后软停这个 session |
-| [cache-keepalive](plugins/cache-keepalive/README.zh-CN.md) | `/keepalive` | 你离开时保住 prompt cache，回来不用把整段对话重新写进 cache |
+| [cache-keepalive](plugins/cache-keepalive/README.zh-CN.md) | `/keepalive` | 你离开时保住 prompt cache，回来不用把整段对话重新写进 cache。装着的时候会关掉 idle compaction |
 
 ## 为什么做这两个
 
-10 月 3 日，我的一个 session 派出了层层嵌套的 subagent，十几个请求同时在跑，几分钟之内账号的 5 小时窗口就用光了。之后所有请求都是 429。Claude Code 的限额是账号级的，里面没有任何一处能说「这个 session 最多用这么多」。三天后我写出了 `/budget`。
+我曾经一个 session 派出了层层嵌套的 subagent，十几个请求同时在跑，几分钟之内账号的 5 小时窗口就用光了。之后所有请求都是 429。Claude Code 的限额是账号级的，里面没有任何一处能说「这个 session 最多用这么多」。三天后我写出了 `/budget`。
 
-`/keepalive` 来自另一个习惯：开着一个长 session 去吃午饭。prompt cache 能活一小时，过期之后的第一条消息要把整段对话重新写一遍，价格是输入价的 2 倍，而平时每一轮只是以 0.025 到 0.1 倍的价格读它。在过期之前读一次 cache，几乎不花钱，那一小时就重新开始算。
+`/keepalive` 来自另一个习惯：开着一个长 session 去吃饭。prompt cache 能活一小时，过期之后的第一条消息要把整段对话重新写一遍，价格是输入价的 2 倍，而平时每一轮只是以 0.025 到 0.1 倍的价格读它。在过期之前读一次 cache，几乎不花钱，那一小时就重新开始算。
 
 ## 安装
 
@@ -45,7 +45,7 @@ claude plugin install cache-keepalive --marketplace pokerface4am/claude-code-mod
 mod 是以你的权限运行的代码。每个 mod 的 README 里都列出了它读什么、写什么、发什么，这里是简版：
 
 - **session-budget** 会用你的登录态读你自己的用量。设了上限时，每 90 秒对 `https://api.anthropic.com/api/oauth/usage` 发一次 GET，这就是自带的 `/usage` 命令背后的接口。凭证由 Claude Code 自己附上，token 不会到 mod 的代码里。这个接口不在公开文档里。`/budget poll off` 可以关掉。除此之外它不发任何网络请求。
-- **cache-keepalive** 会在你离开时发模型请求，这就是它的全部功能，每一次都消耗你的用量。你不在那个 session 里开启它就不发，开了也不会超过你给的次数。
+- **cache-keepalive** 会在你离开时发模型请求，这就是它的全部功能，每一次都消耗你的用量。你不在那个 session 里开启它就不发，开了也不会超过你给的次数。另外，装着它的时候，Claude Code 读到的 `idleCompaction` 设置会是关闭，因为摘要正是它要避免的东西。它不写任何设置文件，你自己写的值优先，mod 的 `disableIdleCompaction` 选项可以保留 idle compaction。
 
 `claude plugin validate <目录>` 会从源码里打印出一个 mod 注册的每个钩子和发起的每种调用。
 

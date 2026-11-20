@@ -18,6 +18,8 @@ This mod is the third option. It keeps the conversation exactly as it is, by rea
 
 Once you arm it with `/keepalive N`, the mod waits until 50 minutes have passed since the session's last request, then sends a tiny tool-less fork of that request (`$.model.fork`) whose whole prompt is "reply with a single period". The request reads the cache, which starts its hour over. It repeats at most N times per absence, so it can never renew forever.
 
+While it is installed, the mod also turns Claude Code's idle compaction off, since a summary is the very thing it exists to avoid. That is a default you can change; see [Idle compaction](#idle-compaction) below.
+
 ## Install
 
 At the prompt of a terminal session:
@@ -79,11 +81,31 @@ From my own transcripts over about three and a half weeks, counted by a script:
 
 **It depends on the one-hour cache.** Claude Code asks for the one-hour TTL by default only on a Claude subscription within the plan's included usage. With an API key or a cloud provider, or once you are over your plan's limit and drawing on usage credits, the main conversation gets five minutes instead. With the mod's defaults the first ping then finds the cache already gone, says so, and switches keep-alive off. If you use an API key or a cloud provider, set Claude Code's `promptCacheTtl` setting to `1h` first.
 
-**Idle compaction and this mod are alternatives.** Idle compaction is on by default and its clock, per the docs, runs from the session's last request. The docs do not say whether a mod's request counts as one. I run with idle compaction off (the `Idle compaction` row in `/config`, or `"idleCompaction": false` in settings.json) and have not tested the two together. If a compaction does run, the mod sees it, stops pinging the old conversation and waits for your next turn. If you want the full conversation kept, turn idle compaction off; if a summary is fine for you, you do not need this mod for large conversations.
+**It takes the place of idle compaction.** Installing the mod turns idle compaction off by default, in every session. The [Idle compaction](#idle-compaction) section says how, and how to keep it on. If a summary is fine for you, you do not need this mod for large conversations.
 
 **It is for hours, not for the night.** A ping reads the whole context. On a 600K-token conversation each one reads 600K tokens, cheap as that is, and nothing is saved if you do not come back before the last ping's hour runs out.
 
 **The computer has to stay awake.** The timer runs inside the Claude Code process.
+
+## Idle compaction
+
+Idle compaction and this mod answer the same problem in opposite ways: one replaces an idle conversation with a summary, the other keeps it as it is. Running both makes little sense, so **installing this mod turns idle compaction off by default.**
+
+How it works:
+
+- While the mod is installed and enabled, Claude Code reads its `idleCompaction` setting as `false`. This holds in every session, including the ones where you never arm `/keepalive`.
+- Nothing is written to your settings files. The mod answers a `settings.read` hook, so the value changes only as Claude Code reads it. Disable or uninstall the mod and your own setting is back.
+- A value you wrote yourself wins. If any settings file (yours, the project's, your organization's) sets `idleCompaction`, to `true` or to `false`, the mod leaves it alone.
+- A bare `/keepalive` ends with a line saying whether idle compaction currently reads as on or off.
+
+What it costs you: in a session where you do not arm `/keepalive`, a large idle conversation is no longer summarized, so coming back after more than an hour means the full cache write. That is what already happens to every conversation under 200K tokens.
+
+To keep idle compaction on, do either of these:
+
+- set the mod's `disableIdleCompaction` option to `false`, in `/config` or on the screen shown at install;
+- write `"idleCompaction": true` in your `settings.json`.
+
+One thing I have not done is leave a 200K-token session idle for an hour on a fresh install and watch the compaction not happen. The mod relies on Claude Code's documented behaviour that what a `settings.read` hook answers is what every reader of the settings gets, and its tests check that other readers see the rewritten value. My own machine has had `"idleCompaction": false` written in its settings all along.
 
 ## The safety valves
 
@@ -98,6 +120,7 @@ From my own transcripts over about three and a half weeks, counted by a script:
 A mod is code that runs with your permissions, so here is all of it. `claude plugin validate` prints the same list from the source.
 
 - **It sends model requests while you are away.** That is the whole point, and each one draws on your usage: the context at cache-read price plus a few output tokens. Never unless you armed it in that session, and at most N times.
+- **It changes how one Claude Code setting reads.** `idleCompaction` reads as `false` while the mod is loaded, unless a settings file sets it or you turn the `disableIdleCompaction` option off. The value is rewritten as it is read and never written to disk. The mod also reads that setting, to tell you its state.
 - **No network request of its own**, no file access, no process.
 - **Environment variables.** Reads `LANG`, `LC_ALL` and `LC_MESSAGES`, to pick the language. Writes none.
 - **Session state.** Three values: the arming (cap and count), when the cache was last touched, and the text of the last `/keepalive` answer.
@@ -107,6 +130,7 @@ A mod is code that runs with your permissions, so here is all of it. `claude plu
 In `/config`, or on the screen shown at install:
 
 - `language` (`auto`): `auto`, `en` or `zh`. `auto` follows `LC_ALL` / `LC_MESSAGES` / `LANG` and falls back to English, which is what Windows gets.
+- `disableIdleCompaction` (`true`): read Claude Code's idle compaction as off while the mod is installed. See [Idle compaction](#idle-compaction).
 - `intervalMinutes` (50): minutes after the last request before a ping. Keep it under the TTL.
 - `cacheTtlMinutes` (60): past this age the mod does not ping.
 - `defaultMax` (3): the cap `/keepalive on` uses.

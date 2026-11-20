@@ -14,11 +14,14 @@ type World = {
   clock: ReturnType<typeof mock.clock>
   answer: () => Fork
   env: Record<string, string | undefined>
+  /** What the settings files hold, merged: the engine's own answer to settings.read. */
+  settings: Record<string, unknown>
 }
 
 /** The language a test runs in; without either, the mod is on `auto`. */
 const ZH = { options: { language: 'zh' } }
 const EN = { options: { language: 'en' } }
+const EN_KEEP_IDLE = { options: { language: 'en', disableIdleCompaction: false } }
 
 const ZERO = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const warm = (): Fork => ({ isAnswered: true, text: '.', usage: { ...ZERO, input_tokens: 20, output_tokens: 1, cache_read_input_tokens: 100_000 } })
@@ -26,9 +29,10 @@ const cold = (): Fork => ({ isAnswered: true, text: '.', usage: { ...ZERO, outpu
 const failing = (): Fork => ({ isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded' as const, usage: ZERO })
 
 function world(on: On, env: Record<string, string | undefined> = {}): World {
-  const w: World = { forks: [], logs: [], status: [], registered: [], clock: undefined as unknown as ReturnType<typeof mock.clock>, answer: warm, env }
+  const w: World = { forks: [], logs: [], status: [], registered: [], clock: undefined as unknown as ReturnType<typeof mock.clock>, answer: warm, env, settings: {} }
   w.clock = mock.clock(on, { now: T0 })
   on('env.get', ($, e) => ({ value: w.env[e.name] }))
+  on('settings.read', () => ({ value: w.settings }))
   on('command.register', ($, e) => (w.registered.push(e), { value: { command: e.name } }))
   on('ui.status', ($, e) => (w.status.push(e.text), { value: undefined }))
   on('ui.log', ($, e) => (w.logs.push(e.text), { value: undefined }))
@@ -294,5 +298,78 @@ describe('cache-keepalive language', () => {
     world(on)
     await start($)
     expect(await keepalive($, '2')).toBe('keepalive on 0/2 · waiting for the first turn')
+  })
+})
+
+/**
+ * A plugin loaded above the one under test (the builtin tier sits above the user tier), standing
+ * for any other reader of the settings: its reads pass down through the mod's settings.read hook. `/probe` answers the merged settings as
+ * JSON, `/probe user` one source as loaded.
+ */
+const PROBE = {
+  name: 'probe',
+  tier: 'builtin' as const,
+  register(on: On) {
+    on('command.run', { command: 'probe' }, async ($, e) => ({
+      text: JSON.stringify(e.args === '' ? await $.settings.read() : await $.settings.read({ source: 'user' })),
+    }))
+  },
+}
+
+async function probe($: any, args = ''): Promise<Record<string, unknown>> {
+  const r = await $.command.run({ command: 'probe', args, origin: { kind: 'composer' }, presentation: { layout: 'main', columns: 120 } })
+  return JSON.parse(String(r.text))
+}
+
+describe('cache-keepalive and idle compaction', () => {
+  test('by default every other reader sees idle compaction as off, and no file is written', { ...EN, plugins: [PROBE] }, async ($, on) => {
+    const w = world(on)
+    w.settings = { model: 'opus' }
+    await start($)
+    expect(await probe($)).toEqual({ model: 'opus', idleCompaction: false })
+    // The engine's own answer still holds no such key: the mod rewrote the read, not the file.
+    expect(w.settings).toEqual({ model: 'opus' })
+  })
+
+  test('a read of one source, as loaded, is left alone', { ...EN, plugins: [PROBE] }, async ($, on) => {
+    const w = world(on)
+    w.settings = { model: 'opus' }
+    await start($)
+    expect(await probe($, 'user')).toEqual({ model: 'opus' })
+  })
+
+  test('with disableIdleCompaction off the settings stand', { ...EN_KEEP_IDLE, plugins: [PROBE] }, async ($, on) => {
+    const w = world(on)
+    w.settings = { model: 'opus' }
+    await start($)
+    expect(await probe($)).toEqual({ model: 'opus' })
+  })
+
+  test('/keepalive ends with how idle compaction reads: off by default', EN, async ($, on) => {
+    world(on)
+    await start($)
+    expect((await keepalive($, '')).split('\n').at(-1)).toBe('Idle compaction is off: an idle conversation is not replaced by a summary.')
+    expect((await keepalive($, '2')).includes('Idle compaction')).toBe(false)
+  })
+
+  test('/keepalive warns when idle compaction is on: the option is off, or a settings file says true', EN_KEEP_IDLE, async ($, on) => {
+    world(on)
+    await start($)
+    expect((await keepalive($, '')).split('\n').at(-1)).toContain('Idle compaction is on')
+  })
+
+  test('a value written in the settings wins over the default', EN, async ($, on) => {
+    const w = world(on)
+    w.settings = { idleCompaction: true }
+    await start($)
+    expect((await keepalive($, '')).split('\n').at(-1)).toContain('Idle compaction is on')
+    w.settings = { idleCompaction: false }
+    expect((await keepalive($, '')).split('\n').at(-1)).toContain('Idle compaction is off')
+  })
+
+  test('Chinese: the same last line', ZH, async ($, on) => {
+    world(on)
+    await start($)
+    expect((await keepalive($, '')).split('\n').at(-1)).toBe('idle compaction 已关闭：对话闲置时不会被压成摘要。')
   })
 })
