@@ -34,6 +34,17 @@ describe('parseCommand', () => {
       budget: { five_hour: { abs: 50 }, seven_day: { abs: 60 } },
     })
   })
+  test('a later command replaces the line of a window it names, of either kind', () => {
+    // At a relative line of 57, `5h<=80` used to keep the 57 (the lower of the two) and so raised nothing.
+    const relative = { five_hour: { rel: { amount: 20, baseline: 37 } } }
+    expect(parseCommand(T, '5h<=80', relative)).toEqual({ kind: 'set', budget: { five_hour: { abs: 80 } } })
+    expect(ceilingOf((parseCommand(T, '5h<=80', relative) as { budget: { five_hour: object } }).budget.five_hour)).toBe(80)
+    expect(parseCommand(T, '5h+20', { five_hour: { abs: 70 } })).toEqual({ kind: 'set', budget: { five_hour: { rel: { amount: 20 } } } })
+    expect(parseCommand(T, '5h<=70 5h+20', { five_hour: { abs: 90 }, seven_day: { abs: 60 } })).toEqual({
+      kind: 'set',
+      budget: { five_hour: { abs: 70, rel: { amount: 20 } }, seven_day: { abs: 60 } },
+    })
+  })
   test('rejects garbage and out-of-range', () => {
     expect(parseCommand(T, '5h=70', {}).kind).toBe('error')
     expect(parseCommand(T, '5h<=0', {}).kind).toBe('error')
@@ -183,6 +194,10 @@ describe('messages in Chinese and in English', () => {
     expect(blockMessage(E, over)).toBe(
       '[session-budget] This session reached its cap: 5h at 68.5%, requests in flight expected to add 2.6 (cap 70%). No more model requests are sent. Run /budget to see it; raise it with /budget 5h<=N or turn it off with /budget off to go on.',
     )
+    // The hint names the window that hit its cap.
+    const weekOver = evaluate({ five_hour: { abs: 90 }, seven_day: { abs: 60 } }, R(10, 61))
+    expect(blockMessage(T, weekOver)).toContain('/budget week<=N 调高')
+    expect(blockMessage(E, weekOver)).toContain('raise it with /budget week<=N')
     const near = evaluate({ five_hour: { abs: 30 } }, R(28, 0))
     expect(warnMessage(T, near)).toBe('[session-budget] 接近上限（5h 28/30），不再派新的 subagent。')
     expect(warnMessage(E, near)).toBe('[session-budget] Close to the cap (5h 28/30): no new subagents.')

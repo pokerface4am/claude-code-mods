@@ -30,7 +30,8 @@ Needs Claude Code 2.1.287 or later in the terminal. To check that mods can load 
 /budget                 show this session's caps and the current readings
 /budget 5h<=70          absolute line: stop when the account's 5h usage reaches 70%
 /budget 5h+20           relative allowance: from the reading now, this session may use 20 more points
-/budget 5h<=70 week+5   combinable; with both kinds on one window, the lower line wins
+/budget 5h<=70 week+5   combinable; both kinds on one window in one command: the lower line wins
+                        (a later command for a window replaces that window's line)
 /budget off [5h|week]   remove every cap, or one window's
 /budget poll 90         account usage polling interval in seconds (15–3600, default 90; `poll off` stops it; shared by all sessions)
 ```

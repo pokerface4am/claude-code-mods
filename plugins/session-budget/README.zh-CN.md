@@ -30,7 +30,8 @@ claude plugin install session-budget --marketplace pokerface4am/claude-code-mods
 /budget                 查看本 session 的上限和当前读数
 /budget 5h<=70          绝对线：账号 5h 用量到 70% 就停
 /budget 5h+20           相对额度：从现在的读数起，本 session 最多再用 20 个百分点
-/budget 5h<=70 week+5   可组合；同一窗口两种都设时取更低的那条
+/budget 5h<=70 week+5   可组合；同一条命令里给同一窗口设两种时，取更低的那条
+                        （之后再单独设这个窗口，会替换它原来的线）
 /budget off [5h|week]   关闭全部或某个窗口
 /budget poll 90         账号用量轮询间隔（秒，15–3600；默认 90；poll off 关闭，所有 session 共用）
 ```

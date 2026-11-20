@@ -18,8 +18,8 @@ const zh = {
   listSep: '，',
   hit: (label: string, used: string, pending: string | undefined, ceiling: string) =>
     `${label} 已用 ${used}%${pending === undefined ? '' : `，在途请求预计再加 ${pending}`}（上限 ${ceiling}%）`,
-  blocked: (hits: string) =>
-    `[session-budget] 本 session 已触顶：${hits}。已停止发送模型请求；用 /budget 查看，/budget 5h<=N 调高或 /budget off 关闭后继续。`,
+  blocked: (hits: string, win: string) =>
+    `[session-budget] 本 session 已触顶：${hits}。已停止发送模型请求；用 /budget 查看，/budget ${win}<=N 调高或 /budget off 关闭后继续。`,
   nearCeiling: (near: string) => `[session-budget] 接近上限（${near}），不再派新的 subagent。`,
 
   // what /budget prints and confirms
@@ -67,8 +67,8 @@ const en: Messages = {
   listSep: ', ',
   hit: (label, used, pending, ceiling) =>
     `${label} at ${used}%${pending === undefined ? '' : `, requests in flight expected to add ${pending}`} (cap ${ceiling}%)`,
-  blocked: hits =>
-    `[session-budget] This session reached its cap: ${hits}. No more model requests are sent. Run /budget to see it; raise it with /budget 5h<=N or turn it off with /budget off to go on.`,
+  blocked: (hits, win) =>
+    `[session-budget] This session reached its cap: ${hits}. No more model requests are sent. Run /budget to see it; raise it with /budget ${win}<=N or turn it off with /budget off to go on.`,
   nearCeiling: near => `[session-budget] Close to the cap (${near}): no new subagents.`,
 
   abs: n => `absolute ≤${n}`,

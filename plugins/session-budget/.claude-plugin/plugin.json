@@ -1,6 +1,6 @@
 {
   "name": "session-budget",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Cap how much of the account's 5h / weekly usage one session may use; soft-stops the session at the cap",
   "author": { "name": "PokerFace4am", "url": "https://x.com/4amPokerFace" },
   "homepage": "https://github.com/pokerface4am/claude-code-mods",

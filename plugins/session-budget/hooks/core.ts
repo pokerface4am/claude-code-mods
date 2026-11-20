@@ -75,14 +75,19 @@ export function parseCommand(t: Messages, args: string, current: Budget): Comman
     return { kind: 'off', windows: rest.length ? (rest as WindowKind[]) : WINDOWS }
   }
 
+  // A window this command names gets a new line in place of its old one: `/budget 5h<=80` after
+  // `/budget 5h+20` means 80, not "80 or the earlier relative line, whichever is lower". Only the
+  // tokens of one command combine (`/budget 5h<=70 5h+20`). Windows it does not name are kept.
   let next: Budget = { ...current }
+  const named = new Set<WindowKind>()
   for (const token of tokens) {
     const m = TOKEN.exec(token)
     if (!m) return { kind: 'error', message: t.badToken(token) }
     const kind = WINDOW_ALIASES[m[1]!.toLowerCase()]!
     const value = Number(m[3])
     if (!(value > 0 && value <= 100)) return { kind: 'error', message: t.badValue(token) }
-    const spec: WinSpec = next[kind] ?? {}
+    const spec: WinSpec = named.has(kind) ? (next[kind] ?? {}) : {}
+    named.add(kind)
     next = {
       ...next,
       [kind]: m[2] === '<=' ? { ...spec, abs: value } : { ...spec, rel: { amount: value } },
@@ -176,10 +181,10 @@ export function statusText(states: readonly WindowState[]): string | undefined {
 }
 
 export function blockMessage(t: Messages, states: readonly WindowState[]): string {
-  const hit = states
-    .filter(s => s.level === 'over')
-    .map(s => t.hit(LABEL[s.kind], fmt(s.used), s.pending > 0 ? fmt(s.pending) : undefined, fmt(s.ceiling)))
-  return t.blocked(hit.join(t.listSep))
+  const over = states.filter(s => s.level === 'over')
+  const hit = over.map(s => t.hit(LABEL[s.kind], fmt(s.used), s.pending > 0 ? fmt(s.pending) : undefined, fmt(s.ceiling)))
+  // The hint names the window that hit its cap, so the command it suggests is the one that helps.
+  return t.blocked(hit.join(t.listSep), LABEL[over[0]?.kind ?? 'five_hour'])
 }
 
 export function warnMessage(t: Messages, states: readonly WindowState[]): string {

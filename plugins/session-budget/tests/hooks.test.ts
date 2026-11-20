@@ -225,6 +225,20 @@ describe('session-budget hooks', () => {
     expect(w.requests).toBe(1)
   })
 
+  test('stopped at a relative line, the absolute line the stop message suggests does raise it', ZH, async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: '/x', surface: 'terminal', isInteractive: true })
+    await budget($, '5h+5') // reading 10: a line at 15
+    w.readings = [{ kind: 'five_hour', percentUsed: 15, resetsAt: AT5 }]
+    const stopped = await step($)
+    expect(stopped.answer).toContain('/budget 5h<=N 调高')
+    expect(w.requests).toBe(0)
+    await budget($, '5h<=40')
+    expect(w.toasts.at(-1)).toBe('[session-budget] 上限已更新：5h 15/40 [绝对 ≤40] 正常')
+    await step($, 1)
+    expect(w.requests).toBe(1)
+  })
+
   test('warn zone refuses new subagents, over zone drops plain prompts but not slash commands', ZH, async ($, on) => {
     const w = world(on)
     await $.session.start({ cwd: '/x', surface: 'terminal', isInteractive: true })
